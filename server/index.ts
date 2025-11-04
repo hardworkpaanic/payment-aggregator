@@ -1,9 +1,159 @@
-import express, { json } from "express";
+// server.ts
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+  type Express,
+} from "express";
 
-const app = express();
+const app: Express = express();
+const port = process.env.PORT || 8080;
 
-app.use(json());
+app.use(express.json());
 
-app.listen(4000, () => {
-  console.log("Сервер запущен на порту: 4000");
+// Это типы для данных, которые мы ожидаем
+interface PaymentDetails {
+  cardNumber: string;
+  amount: number;
+  currency: string;
+  providerName: string;
+}
+
+interface PaymentRequest {
+  amount: number;
+}
+
+// Имитация запроса к одному платежному сервису
+async function queryPaymentProvider(
+  providerName: string,
+  amount: number
+): Promise<PaymentDetails | null> {
+  console.log(`Запрос к провайдеру: ${providerName}`);
+
+  // Имитация разного времени ответа и успешного/неуспешного исхода
+  const mockDelay = Math.random() * 1000 + 500; // От 0.5 до 1.5 секунды
+  await new Promise((resolve) => setTimeout(resolve, mockDelay));
+
+  // Для примера, 5-й провайдер всегда "успешен", остальные часто "неудачны"
+  if (providerName === "Provider_5") {
+    return {
+      cardNumber: "2200 1234 5678 9000", // Пример номера карты
+      amount: amount,
+      currency: "RUB",
+      providerName: providerName,
+    };
+  }
+
+  // Имитация случая, когда у провайдера нет доступных реквизитов
+  if (Math.random() > 0.3) {
+    // 70% вероятность отказа
+    return null;
+  }
+
+  // Имитация успешного ответа от другого провайдера
+  return {
+    cardNumber: `2200 ${Math.floor(Math.random() * 10000)} ${Math.floor(
+      Math.random() * 10000
+    )} ${Math.floor(Math.random() * 10000)}`,
+    amount: amount,
+    currency: "RUB",
+    providerName: providerName,
+  };
+}
+
+// Основной обработчик для получения реквизитов
+app.post(
+  "/api/get-payment-details",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { amount }: PaymentRequest = req.body;
+
+      if (!amount || amount <= 0) {
+        res
+          .status(400)
+          .json({ error: "Неверная или отсутствующая сумма платежа" });
+        return;
+      }
+
+      const providers = [
+        "Provider_1",
+        "Provider_2",
+        "Provider_3",
+        "Provider_4",
+        "Provider_5",
+        "Provider_6",
+        "Provider_7",
+        "Provider_8",
+        "Provider_9",
+        "Provider_10",
+      ];
+
+      let paymentDetails: PaymentDetails | null = null;
+
+      // Последовательно опрашиваем провайдеров
+      for (const provider of providers) {
+        const result = await queryPaymentProvider(provider, amount);
+        if (result) {
+          paymentDetails = result;
+          console.log(`Нашли реквизиты у провайдера: ${provider}`);
+          break; // Прерываем цикл, как только нашли реквизиты
+        }
+      }
+
+      if (paymentDetails) {
+        res.status(200).json({
+          success: true,
+          message: "Реквизиты для оплаты получены",
+          data: paymentDetails,
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: "Не удалось найти доступные реквизиты для оплаты",
+        });
+      }
+    } catch (error: unknown) {
+      next(new Error((error as Error).message));
+    }
+  }
+);
+
+// Обработчик для подтверждения оплаты
+app.post(
+  "/api/confirm-payment",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Здесь будет логика обработки подтверждения оплаты от пользователя
+      // Например, проверка транзакции у провайдера, обновление статуса в БД и т.д.
+      console.log("Пользователь подтвердил оплату", req.body);
+
+      res.status(200).json({
+        success: true,
+        message: "Оплата подтверждена и обрабатывается",
+      });
+    } catch (error: unknown) {
+      next(new Error((error as Error).message));
+    }
+  }
+);
+
+// Обработчик для отмены
+app.post(
+  "/api/cancel-payment",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Логика отмены платежа
+      console.log("Пользователь отменил платеж", req.body);
+      res.status(200).json({
+        success: true,
+        message: "Платеж отменен",
+      });
+    } catch (error: unknown) {
+      next(new Error((error as Error).message));
+    }
+  }
+);
+
+app.listen(port, () => {
+  console.log(`Сервер запущен на порту ${port}`);
 });
