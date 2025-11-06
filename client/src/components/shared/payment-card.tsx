@@ -7,10 +7,17 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
+import { useLocation } from "react-router-dom";
 import { InputWithCopyButton } from "./InputWithCopyButton";
 import { Button } from "../ui/button";
 
 export default function PaymentCard() {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const amount = searchParams.get("amount");
+
+  console.log(amount);
+
   return (
     <Card className="w-[400px]">
       <CardHeader>
