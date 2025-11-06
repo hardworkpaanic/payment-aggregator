@@ -29,9 +29,7 @@ interface PaymentRequest {
 
 interface PaymentResponse {
   success: boolean;
-  message: string;
-  paymentId?: string;
-  data?: PaymentDetails;
+  paymentUrl?: string;
 }
 
 // Функция для сохранения данных в Redis
@@ -139,11 +137,15 @@ app.post(
       }
 
       if (paymentDetails) {
-        res.status(200).json({
+        // Сохраняем данные в Redis и получаем UUID
+        const paymentId = await savePaymentToRedis(paymentDetails);
+
+        const response: PaymentResponse = {
           success: true,
-          message: "Реквизиты для оплаты получены",
-          data: paymentDetails,
-        });
+          paymentUrl: paymentId,
+        };
+
+        res.status(200).json(response);
       } else {
         res.status(404).json({
           success: false,
@@ -156,18 +158,75 @@ app.post(
   }
 );
 
-// Обработчик для подтверждения оплаты
+// Новый обработчик для получения данных по UUID
+app.get(
+  "/api/payment/:paymentId",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { paymentId } = req.params;
+
+      if (!paymentId) {
+        res.status(400).json({ error: "Неверный или отсутствующий paymentId" });
+        return;
+      }
+
+      const paymentDetails = await getPaymentFromRedis(paymentId);
+
+      if (paymentDetails) {
+        res.status(200).json({
+          success: true,
+          message: "Данные платежа найдены",
+          data: paymentDetails,
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: "Данные платежа не найдены или истекли",
+        });
+      }
+    } catch (error: unknown) {
+      next(new Error((error as Error).message));
+    }
+  }
+);
+
+// Обработчик для подтверждения оплаты (обновленный)
 app.post(
   "/api/confirm-payment",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const { paymentId } = req.body;
+
+      if (!paymentId) {
+        res.status(400).json({ error: "Неверный или отсутствующий paymentId" });
+        return;
+      }
+
+      // Получаем данные из Redis
+      const paymentDetails = await getPaymentFromRedis(paymentId);
+
+      if (!paymentDetails) {
+        res.status(404).json({
+          success: false,
+          message: "Данные платежа не найдены или истекли",
+        });
+        return;
+      }
+
       // Здесь будет логика обработки подтверждения оплаты от пользователя
       // Например, проверка транзакции у провайдера, обновление статуса в БД и т.д.
-      console.log("Пользователь подтвердил оплату", req.body);
+      console.log("Пользователь подтвердил оплату", {
+        paymentId,
+        paymentDetails,
+      });
+
+      // Удаляем данные из Redis после подтверждения (опционально)
+      await redis.del(`payment:${paymentId}`);
 
       res.status(200).json({
         success: true,
         message: "Оплата подтверждена и обрабатывается",
+        data: paymentDetails,
       });
     } catch (error: unknown) {
       next(new Error((error as Error).message));
@@ -175,13 +234,24 @@ app.post(
   }
 );
 
-// Обработчик для отмены
+// Обработчик для отмены (обновленный)
 app.post(
   "/api/cancel-payment",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const { paymentId } = req.body;
+
+      if (!paymentId) {
+        res.status(400).json({ error: "Неверный или отсутствующий paymentId" });
+        return;
+      }
+
       // Логика отмены платежа
-      console.log("Пользователь отменил платеж", req.body);
+      console.log("Пользователь отменил платеж", { paymentId });
+
+      // Удаляем данные из Redis при отмене
+      await redis.del(`payment:${paymentId}`);
+
       res.status(200).json({
         success: true,
         message: "Платеж отменен",
@@ -191,6 +261,19 @@ app.post(
     }
   }
 );
+
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  console.log("Closing Redis connection...");
+  await redis.quit();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.log("Closing Redis connection...");
+  await redis.quit();
+  process.exit(0);
+});
 
 app.listen(port, () => {
   console.log(`Сервер запущен на порту ${port}`);
