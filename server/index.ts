@@ -5,9 +5,13 @@ import express, {
   type NextFunction,
   type Express,
 } from "express";
+import Redis from "ioredis";
+import { v4 as uuidv4 } from "uuid";
 
 const app: Express = express();
 const port = process.env.PORT || 8080;
+
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
 app.use(express.json());
 
@@ -21,6 +25,40 @@ interface PaymentDetails {
 
 interface PaymentRequest {
   amount: number;
+}
+
+interface PaymentResponse {
+  success: boolean;
+  message: string;
+  paymentId?: string;
+  data?: PaymentDetails;
+}
+
+// Функция для сохранения данных в Redis
+async function savePaymentToRedis(
+  paymentDetails: PaymentDetails
+): Promise<string> {
+  const paymentId = uuidv4();
+  const key = `payment:${paymentId}`;
+
+  // Сохраняем на 15 минут (900 секунд)
+  await redis.setex(key, 900, JSON.stringify(paymentDetails));
+
+  return paymentId;
+}
+
+// Функция для получения данных из Redis
+async function getPaymentFromRedis(
+  paymentId: string
+): Promise<PaymentDetails | null> {
+  const key = `payment:${paymentId}`;
+  const data = await redis.get(key);
+
+  if (data) {
+    return JSON.parse(data) as PaymentDetails;
+  }
+
+  return null;
 }
 
 // Имитация запроса к одному платежному сервису
