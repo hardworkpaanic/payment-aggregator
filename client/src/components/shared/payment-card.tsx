@@ -7,17 +7,16 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { useLocation } from "react-router-dom";
 import { InputWithCopyButton } from "./InputWithCopyButton";
 import { Button } from "../ui/button";
+import usePayments from "@/hooks/usePayment";
 
 export default function PaymentCard() {
-  const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const amount = searchParams.get("amount");
+  const { paymentData, isLoading } = usePayments();
 
-  console.log(amount);
-
+  if (isLoading) {
+    return <div>Загрузка...</div>;
+  }
   return (
     <Card className="w-[400px]">
       <CardHeader>
@@ -31,8 +30,14 @@ export default function PaymentCard() {
       </CardHeader>
 
       <CardContent className="flex flex-col gap-2">
-        <InputWithCopyButton label="Номер карты" value="2200 3230 2323 9387" />
-        <InputWithCopyButton label="Сумма" value="2,200₽" />
+        <InputWithCopyButton
+          label="Номер карты"
+          value={paymentData?.cardNumber as string}
+        />
+        <InputWithCopyButton
+          label="Сумма"
+          value={String(paymentData?.amount)}
+        />
       </CardContent>
 
       <CardFooter className="flex gap-2 ">

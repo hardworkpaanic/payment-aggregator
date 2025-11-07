@@ -7,6 +7,7 @@ import express, {
 } from "express";
 import Redis from "ioredis";
 import { v4 as uuidv4 } from "uuid";
+import cors from "cors";
 
 const app: Express = express();
 const port = process.env.PORT || 8080;
@@ -14,6 +15,8 @@ const port = process.env.PORT || 8080;
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
 app.use(express.json());
+
+app.use(cors()); // Разрешите все CORS-запросы
 
 // Это типы для данных, которые мы ожидаем
 interface PaymentDetails {
@@ -142,7 +145,7 @@ app.post(
 
         const response: PaymentResponse = {
           success: true,
-          paymentUrl: paymentId,
+          paymentUrl: `http://localhost:5173/?paymentId=${paymentId}`,
         };
 
         res.status(200).json(response);
